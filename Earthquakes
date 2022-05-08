@@ -1,0 +1,209 @@
+#import packages 
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import json
+import requests
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+import cartopy.crs as ccrs
+import shapely.wkt
+import datetime
+
+df = pd.read_csv('/Users/enduranceebhodaghe/USGS_Quakes_1980-2022.csv',usecols =['geometry','mag'])
+geom = [shapely.wkt.loads(wkt) for wkt in df.geometry.values]
+gdf = gpd.GeoDataFrame(df,crs ='epsg:4326', geometry=geom)
+del df
+
+import pygmt
+import os
+#[xmin, xmax, ymin, ymax] = -180, 180, -70, 70
+
+#places_gdf.geometry.centroid.x,places_gdf.geometry.centroid.y, c=places_gdf.fcount, vmin=15, vmax=100
+
+#Use a real background downloaded automatically for the region
+#grid = pygmt.datasets.load_earth_relief(resolution="30m", region=[-180, 180, -80, 80])
+
+fig = pygmt.Figure()
+fig.coast(shorelines=True, region=[-180, 180, -80, 80], projection="M20c",)
+
+#Add earth relief
+#fig.grdimage(grid=grid, cmap='geo') #Plot a grid (xarray grid or TIF file)
+with pygmt.config(FONT='18p'):
+    fig.colorbar(frame=['x+l"Elevation (m)"'], position="JMR") #Specify the colorbar to be on the side
+
+#Add data to put something on the legend
+fig.plot(x=gdf.geometry.x, y=gdf.geometry.y, style='c0.3c', color='white', label='Earthquakes')
+
+#Create a custom colormap
+output_cpt = 'global.cpt'
+pygmt.makecpt(output=output_cpt, cmap='magma', \
+              series=[np.log10(gdf.mag.min()),np.log10(gdf.mag.max()), 0.01], \
+              transparency='+a100', background='white', log=True)
+fig.plot(x=gdf.geometry.x, y=gdf.geometry.y, color=gdf.mag, style='c0.3c', \
+         cmap=output_cpt, pen='black', transparency=30)
+
+#Add legend, frame, and colorbar
+with pygmt.config(FONT='18p'):
+    fig.basemap(frame=['a5g5', 'WSne'])
+    fig.legend(position="jTL+o0.3c", box='+gwhite+p1p')
+    fig.colorbar(cmap=output_cpt,frame=['+l"Magnitude"'])
+fig.show()
+
+#gdf.geometry.x, gdf.geometry.y, c=gdf.mag,
+
+#Load Populated places 
+places = '/Users/enduranceebhodaghe/BigData_SoSe2022/Lab03/ne_10m_populated_places/ne_10m_populated_places.shp'
+places_gdf = gpd.read_file(places)
+places_gdf = places_gdf[['NAME', 'geometry']]
+places_gdf.head()
+
+#Buffer populated places 
+radius = 0.5
+places_gdf['geometry'] = places_gdf.geometry.buffer(radius)
+places_gdf.head()
+
+#Joining all the points in the buffer 
+points_in_city = gpd.sjoin(gdf, places_gdf, how='right', op='intersects')
+
+#using groupby based on the index of the point
+counts = points_in_city.groupby([points_in_city.index]).count()['NAME'].values
+mags = points_in_city.groupby([points_in_city.index]).sum()['mag'].values
+print(counts.shape, places_gdf.shape)
+
+#subset of data >5
+points_in_city = gpd.sjoin(gdf[gdf.mag >= 5], places_gdf, how ='right', op='intersects')
+counts5 = points_in_city.groupby([points_in_city.index]).count()['NAME'].values
+mags5 = points_in_city.groupby([points_in_city.index]).sum()['mag'].values
+print(counts5.shape,mags5.shape)
+
+places_gdf['fcount'] = counts
+places_gdf['mag']= mags
+places_gdf['fcount5']= counts5
+places_gdf['mag5'] = mags5
+
+places_gdf= places_gdf.sort_values(by ='fcount', axis=0
+
+import pygmt
+import os
+#[xmin, xmax, ymin, ymax] = -180, 180, -70, 70
+
+#places_gdf.geometry.centroid.x,places_gdf.geometry.centroid.y, c=places_gdf.fcount, vmin=15, vmax=100
+
+#Use a real background downloaded automatically for the region
+#grid = pygmt.datasets.load_earth_relief(resolution="30m", region=[-180, 180, -80, 80])
+
+fig = pygmt.Figure()
+fig.coast(shorelines=True, region=[-180, 180, -80, 80], projection="M20c",)
+
+#Add earth relief
+#fig.grdimage(grid=grid, cmap='geo') #Plot a grid (xarray grid or TIF file)
+with pygmt.config(FONT='18p'):
+    fig.colorbar(frame=['x+l"Elevation (m)"'], position="JMR") #Specify the colorbar to be on the side
+
+#Add data to put something on the legend
+fig.plot(x=places_gdf.geometry.centroid.x, y=places_gdf.geometry.centroid.y, style='c0.3c', color='white', label='Earthquakes')
+
+#Create a custom colormap
+output_cpt = 'global.cpt'
+pygmt.makecpt(output=output_cpt, cmap='magma', \
+              series=[np.log10(places_gdf.fcount.min()),np.log10(places_gdf.fcount.max()), 0.01], \
+              transparency='+a100', background='white', log=True)
+fig.plot(x=places_gdf.geometry.centroid.x, y=places_gdf.geometry.centroid.y, color=places_gdf.fcount, style='c0.3c', \
+         cmap=output_cpt, pen='black', transparency=30)
+
+#Add legend, frame, and colorbar
+with pygmt.config(FONT='18p'):
+    fig.basemap(frame=['a5g5', 'WSne'])
+    fig.legend(position="jTL+o0.3c", box='+gwhite+p1p')
+    fig.colorbar(cmap=output_cpt,frame=['+l"Density"'])
+fig.show()
+
+#Biggest earthquake
+ind = (-places_gdf.mag5).argsort()[:10]
+print('Biggest:',[places_gdf.iloc[ind]['NAME'].values, places_gdf.iloc[ind]['mag'].values])
+
+#Most Frequent Region
+ind = (-places_gdf.fcount5).argsort()[:10]
+print('Most Frequent:',[places_gdf.iloc[ind]['NAME'].values, places_gdf.iloc[ind]['fcount'].values])
+
+#Gridded Maps
+import numpy as np
+minX, maxX, minY, maxY, width = -180, 0, 0, 60, 0.25
+Xspace = np.arange(minX, maxX + width, width)
+Yspace = np.arange(minY, maxY + width, width)
+
+from shapely.geometry import Polygon
+boxlist = []
+for i, xval in enumerate(Xspace[:-1]):
+    for j, yval in enumerate(Yspace[:-1]):
+        box = [xval, Xspace[i+1], yval, Yspace[j+1]]
+        #print(box)
+        box_coords = [[box[0], box[2]], [box[1], box[2]], [box[1], box[3]], [box[0], box[3]]]
+        #print(box_coords)
+        geom = Polygon([[p[0], p[1]] for p in box_coords])
+        boxlist.append(geom)
+boxes= gpd.GeoDataFrame(crs='epsg:4326', geometry=boxlist)
+
+#Join earthquakes into boxes
+quake_in_box = gpd.sjoin(gdf, boxes, how='right', op='within') 
+
+#Join earthquakes with magnitude greater than 5 into boxes
+quake_in_box_mag5 = gpd.sjoin(gdf[gdf['mag']>5], boxes, how='right', op='within')
+
+#Number of all quakes and quakes with a magnitude greater than 5
+counts = quake_in_box.groupby([quake_in_box.index]).count()['index_left'].values
+counts_mag5 = quake_in_box_mag5.groupby([quake_in_box_mag5.index]).count()['index_left'].values
+
+#Total magnitude of all quakes and quakes with a magnitude greater than 5 
+total_mag = quake_in_box.groupby([quake_in_box.index]).sum()['mag'].values
+total_mag_greater5 = quake_in_box_mag5.groupby([quake_in_box_mag5.index]).sum()['mag'].values
+
+arr_counts = counts.reshape((Xspace.shape[0]-1, Yspace.shape[0]-1)).T
+arr_counts = arr_counts[::-1, :].astype(float)
+arr_counts[arr_counts < 1] = np.nan
+
+arr_counts_mag5 = counts_mag5.reshape((Xspace.shape[0]-1, Yspace.shape[0]-1)).T
+arr_counts_mag5 = arr_counts_mag5[::-1, :].astype(float)
+arr_counts_mag5[arr_counts_mag5 < 1] = np.nan
+
+arr_total_mag = total_mag.reshape((Xspace.shape[0]-1, Yspace.shape[0]-1)).T
+arr_total_mag = arr_total_mag[::-1, :].astype(float)
+
+arr_total_mag_greater5 = total_mag_greater5.reshape((Xspace.shape[0]-1, Yspace.shape[0]-1)).T
+arr_total_mag_greater5 = arr_total_mag_greater5[::-1, :].astype(float)
+
+from osgeo import gdal
+
+def To_Tif(output, arr, gt, cs):
+    driver = gdal.GetDriverByName('GTiff')
+    driver.Register()
+    outRaster = driver.Create(output, arr.shape[1], arr.shape[0], 1, gdal.GDT_Float64)
+    outRaster.SetGeoTransform(gt)
+    outRaster.SetProjection(cs)
+    outband = outRaster.GetRasterBand(1)
+    outband.WriteArray(arr,0,0)
+    outband.SetNoDataValue(np.nan)
+    outband.FlushCache()
+    del outband, outRaster, driver
+
+minX, maxX, minY, maxY, width = -180, 180, -60, 60, 0.25
+grid_size = 0.25
+cs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs'
+gt = [minX, grid_size, 0, maxY, 0, -1*grid_size]
+To_Tif(' total magnitude of all earthquakes.tif', arr_counts, gt, cs)
+
+xmin, xmax, ymin, ymax = -180, 180, -70, 70
+dmax, dmin = data.max().to_array().values[0], data.min().to_array().values[0]
+fig = pygmt.Figure() #Initialize a new figure
+with pygmt.config(FONT='18p'):
+    fig.basemap(frame=['ag', 'WSne'], region=[xmin, xmax, ymin, ymax], projection="N20c")
+output_cpt = 'tmp.cpt'
+pygmt.makecpt(output=output_cpt, cmap='plasma', \
+              series=[np.log10(dmin),np.log10(dmax), 0.01], \
+              transparency='+a100', background='white', log=True, no_bg=True)
+with pygmt.config(COLOR_NAN='white', COLOR_BACKGROUND='white'):
+    fig.grdimage(grid=data.band_data, cmap=output_cpt)
+fig.coast(shorelines=True)
+fig.colorbar(cmap=output_cpt, frame=['x+l"count of all earthquakes above magnitude 5"'])
+fig.show()
